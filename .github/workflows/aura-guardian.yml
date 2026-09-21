@@ -1,0 +1,38 @@
+name: AuraGuardian SecOps Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sast-and-remediate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install semgrep requests PyGithub
+
+      - name: Run Foundation Scan (Semgrep)
+        # We append || true so the pipeline continues even if vulnerabilities are found
+        run: semgrep scan --config auto --json -o semgrep-results.json . || true
+
+      - name: Trigger AIAura Auto-Remediation
+        env:
+          AIAURA_API_KEY: ${{ secrets.AIAURA_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python aura_guardian.py --report semgrep-results.json --repo ${{ github.repository }}
